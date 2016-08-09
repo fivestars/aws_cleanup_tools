@@ -5,6 +5,7 @@ import sys
 
 
 def get_unused_security_groups(session):
+    # The security group are region dependent, no need to search outside the region
     all_sg = {sg['GroupId']: sg for sg in session.ec2.describe_security_groups()}
     name2id = {sg['GroupName']: sg['GroupId'] for sg in all_sg.values()}
     name2id['amazon-elb-sg'] = 0
@@ -17,7 +18,6 @@ def get_unused_security_groups(session):
             used_sg.add(group_id)
 
     # check the one used by instances
-    instance_sg = set()
     for reservations in session.ec2.describe_instances():
         used_sg.update({sg['GroupName'] for sg in reservations['Groups']})
         used_sg.update({sg['GroupId']
@@ -40,10 +40,41 @@ def get_unused_security_groups(session):
         used_sg.update(name2id.get(ec2sg['EC2SecurityGroupName']) for ec2sg in elcsg['EC2SecurityGroups'])
 
     unused = set(all_sg.keys()) - used_sg
-    return [
+    return sorted([
         {
             'id': sg_id,
             'name': all_sg[sg_id]['GroupName'],
         }
-        for sg_id in sorted(unused)
-    ]
+        for sg_id in unused
+    ], key=lambda e: e['name'])
+
+
+def get_unused_key_pairs(session):
+
+    # get all key_pairs
+    all_kp = [kp['KeyName'] for kp in session.ec2.describe_key_pairs()]
+    used_kp = set()
+
+    print(all_kp)
+
+    # Instances
+    for reservations in session.ec2.describe_instances():
+        used_kp.update({i['KeyName']
+                        for i in reservations['Instances']
+                        })
+
+    # Launch configuration
+    for lc in session.asg.describe_launch_configurations():
+        used_kp.add(lc['KeyName'])
+
+    print(used_kp)
+
+    unused = set(all_kp) - used_kp
+    return sorted([
+        {
+            'id': kp
+        }
+        for kp in unused
+    ], key=lambda e: e['id'])
+
+
