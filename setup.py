@@ -27,11 +27,14 @@ setup(name='aws_stack_diff',
       author='Fivestars',
       license='MIT',
       packages=['aws_cleanup_tools'],
+      dependency_links=[
+          'git+ssh://git@github.com/fivestars/boto3_wrapper.git@master#egg=boto3_wrapper-0.1',
+      ],
       install_requires=[
-          'git+ssh://git@github.com/fivestars/boto3_wrapper.git@master',
           # 'git+ssh://git@github.com/fivestars/aws_cloudstack_diff_tool.git@master',
           'six==1.10.0',
           'tabulate==0.7.5',
+          'boto3_wrapper==0.1',
       ],
       include_package_data=True,
       zip_safe=True)
