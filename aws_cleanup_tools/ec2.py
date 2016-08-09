@@ -4,18 +4,20 @@ from pprint import pprint
 
 import sys
 
+
 def tags_get(tags, name, default=None):
     for tag in tags or []:
         if tag['Key'] == name:
             return tag['Value']
     return default
 
+
 def get_unused_security_groups(session):
     # The security group are region dependent, no need to search outside the region
     all_sg = {sg['GroupId']: sg for sg in session.ec2.describe_security_groups()}
     name2id = {sg['GroupName']: sg['GroupId'] for sg in all_sg.values()}
     name2id['amazon-elb-sg'] = 0
-    name2id.update({k:k for k in all_sg.keys()})
+    name2id.update({k: k for k in all_sg.keys()})
     used_sg = set()
 
     # remove the ones that are in cloudformation
@@ -27,10 +29,10 @@ def get_unused_security_groups(session):
     for reservations in session.ec2.describe_instances():
         used_sg.update({sg['GroupName'] for sg in reservations['Groups']})
         used_sg.update({sg['GroupId']
-                            for i in reservations['Instances']
-                            for ni in i['NetworkInterfaces']
-                            for sg in ni['Groups']
-                            })
+                        for i in reservations['Instances']
+                        for ni in i['NetworkInterfaces']
+                        for sg in ni['Groups']
+                        })
 
     # check the one used by load balancers
     for elb in session.elb.describe_load_balancers():
@@ -47,16 +49,15 @@ def get_unused_security_groups(session):
 
     unused = set(all_sg.keys()) - used_sg
     return sorted([
-        {
-            'id': sg_id,
-            'name': all_sg[sg_id]['GroupName'],
-        }
-        for sg_id in unused
-    ], key=lambda e: e['name'])
+                      {
+                          'id': sg_id,
+                          'name': all_sg[sg_id]['GroupName'],
+                      }
+                      for sg_id in unused
+                      ], key=lambda e: e['name'])
 
 
 def get_unused_key_pairs(session):
-
     # get all key_pairs
     all_kp = [kp['KeyName'] for kp in session.ec2.describe_key_pairs()]
     used_kp = set()
@@ -77,11 +78,11 @@ def get_unused_key_pairs(session):
 
     unused = set(all_kp) - used_kp
     return sorted([
-        {
-            'id': kp
-        }
-        for kp in unused
-    ], key=lambda e: e['id'])
+                      {
+                          'id': kp
+                      }
+                      for kp in unused
+                      ], key=lambda e: e['id'])
 
 
 def get_unused_instances(session):
@@ -109,11 +110,38 @@ def get_unused_instances(session):
 
     all_unused = stopped_instance.union(unnamed_instances) - used_ec2
     return sorted([
-        {
-            'id': i['InstanceId'],
-            'name': tags_get(i.get('Tags'), 'Name', '<no name>')
-        }
-        for i in all_instances if i['InstanceId'] in all_unused
-    ], key=lambda e: e['name'])
+                      {
+                          'id': i['InstanceId'],
+                          'name': tags_get(i.get('Tags'), 'Name', '<no name>')
+                      }
+                      for i in all_instances if i['InstanceId'] in all_unused
+                      ], key=lambda e: e['name'])
 
 
+def get_unused_images(session):
+    # We only look for available images
+    all_ami = [i for i in session.ec2.describe_images(Owners=['self']) if i['State'] == 'available']
+    all_ami_id = {i['ImageId'] for i in all_ami}
+    used_images = set()
+
+    # instance ami
+    all_instances = list(chain(*[r['Instances'] for r in session.ec2.describe_instances()]))
+    for i in all_instances:
+        used_images.add(i['ImageId'])
+
+    # launch configuration
+    for lc in session.asg.describe_launch_configurations():
+        used_images.add(lc['ImageId'])
+
+    unused_images = all_ami_id - used_images
+    print(unused_images)
+
+    # cloud formation ?
+    return sorted([
+                      {
+                          'id': i['ImageId'],
+                          'name': i['Name'],
+                          'date': i['CreationDate'],
+                      }
+                      for i in all_ami if i['ImageId'] in unused_images
+                      ], key=lambda e: (e['date']))
