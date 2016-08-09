@@ -40,10 +40,6 @@ def get_unused_security_groups(session):
     for lc in session.asg.describe_launch_configurations():
         used_sg.update(lc['SecurityGroups'])
 
-    # Elasticache security groups
-    for elcsg in session.elasticache.describe_cache_security_groups():
-        used_sg.update(ec2sg['EC2SecurityGroupName'] for ec2sg in elcsg['EC2SecurityGroups'])
-
     used_sg = set(map(name2id.get, used_sg))
     unused = set(all_sg.keys()) - used_sg
 
