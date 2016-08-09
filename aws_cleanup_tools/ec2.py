@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
+from itertools import chain
 from pprint import pprint
 
 import sys
 
+def tags_get(tags, name, default=None):
+    for tag in tags or []:
+        if tag['Key'] == name:
+            return tag['Value']
+    return default
 
 def get_unused_security_groups(session):
     # The security group are region dependent, no need to search outside the region
@@ -14,7 +20,7 @@ def get_unused_security_groups(session):
 
     # remove the ones that are in cloudformation
     for group_id, sg in list(all_sg.items()):
-        if [t for t in sg.get('Tags', []) if t['Key'] == 'aws:cloudformation:stack-name']:
+        if not tags_get(sg.get('Tags', []), 'aws:cloudformation:stack-name'):
             used_sg.add(group_id)
 
     # check the one used by instances
@@ -76,5 +82,38 @@ def get_unused_key_pairs(session):
         }
         for kp in unused
     ], key=lambda e: e['id'])
+
+
+def get_unused_instances(session):
+    # An unused instance is very vague, so we just are getting
+    all_instances = list(chain(*[r['Instances'] for r in session.ec2.describe_instances()]))
+    all_id = [i['InstanceId'] for i in all_instances]
+    used_ec2 = set()
+
+    # Instance in stack are used
+    for i in all_instances:
+        if [t for t in i.get('Tags', []) if t['Key'] == 'aws:cloudformation:stack-name']:
+            used_ec2.add(i['InstanceId'])
+
+    # Instance in a asg is used
+    for i in session.asg.describe_auto_scaling_instances():
+        used_ec2.add(i['InstanceId'])
+
+    # From what's left, remove instance that are stopped
+    stopped_instance = {i['InstanceId'] for i in all_instances if i['State']['Name'] in ['stopped']}
+
+    # We also want to clean instances that have no names
+    unnamed_instances = {i['InstanceId'] for i in all_instances if not tags_get(i.get('Tags'), 'Name')}
+
+    # Maybe we can add more instance (more than 30days old ones for examples)
+
+    all_unused = stopped_instance.union(unnamed_instances) - used_ec2
+    return sorted([
+        {
+            'id': i['InstanceId'],
+            'name': tags_get(i.get('Tags'), 'Name', '<no name>')
+        }
+        for i in all_instances if i['InstanceId'] in all_unused
+    ], key=lambda e: e['name'])
 
 
