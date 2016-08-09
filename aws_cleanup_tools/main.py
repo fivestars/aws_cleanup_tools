@@ -5,12 +5,12 @@ import tabulate
 from boto3_wrapper.boto_session import SessionWrapper as BotoSession
 from aws_cleanup_tools.orphan_finder import resource_finder
 
+
 def check_result(unused, used):
     unused_id = {i['id'] for i in unused}
     used_id = {i['id'] for i in used}
 
     assert not unused_id.intersection(used_id)
-
 
 
 if __name__ == '__main__':

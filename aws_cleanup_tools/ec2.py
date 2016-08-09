@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 from itertools import chain
 
-import sys
-
 
 def tags_get(tags, name, default=None):
     for tag in tags or []:
