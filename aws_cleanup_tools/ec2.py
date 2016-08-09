@@ -6,8 +6,9 @@ import sys
 
 def get_unused_security_groups(session):
     all_sg = {sg['GroupId']: sg for sg in session.ec2.describe_security_groups()}
-    sgname2id = {sg['GroupName']: sg['GroupId'] for sg in all_sg.values()}
-    sgname2id['amazon-elb-sg'] = 0
+    name2id = {sg['GroupName']: sg['GroupId'] for sg in all_sg.values()}
+    name2id['amazon-elb-sg'] = 0
+    name2id.update({k:k for k in all_sg.keys()})
     used_sg = set()
 
     # remove the ones that are in cloudformation
@@ -27,12 +28,16 @@ def get_unused_security_groups(session):
 
     # check the one used by load balancers
     for elb in session.elb.describe_load_balancers():
-        used_sg.add(sgname2id[elb['SourceSecurityGroup']['GroupName']])
+        used_sg.add(name2id[elb['SourceSecurityGroup']['GroupName']])
         used_sg.update(elb['SecurityGroups'])
 
     # launch configuration
-    # for lc in session.asg.describe_launch_configurations():
-    #     print(lc['SecurityGroups'])
+    for lc in session.asg.describe_launch_configurations():
+        used_sg.update(map(name2id.get, lc['SecurityGroups']))
+
+    # Elasticache security groups
+    for elcsg in session.elasticache.describe_cache_security_groups():
+        used_sg.update(name2id.get(ec2sg['EC2SecurityGroupName']) for ec2sg in elcsg['EC2SecurityGroups'])
 
     unused = set(all_sg.keys()) - used_sg
     return [
